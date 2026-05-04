@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: deepguard-api
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: MODEL_PATH
+        value: models/deepfake_model.pth
+      - key: PYTHON_VERSION
+        value: 3.11.0
+    disk:
+      name: model-storage
+      mountPath: /opt/render/project/src/models
+      sizeGB: 2

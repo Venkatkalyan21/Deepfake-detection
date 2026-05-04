@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DeepGuard — AI Deepfake Video Detector</title>
+  <meta name="description" content="State-of-the-art hybrid spatial-frequency CNN deepfake video detection system for research and forensic analysis." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <!-- Animated background particles -->
+  <div id="particles-bg" aria-hidden="true"></div>
+
+  <!-- ── HEADER ── -->
+  <header class="header">
+    <div class="header-inner">
+      <div class="logo">
+        <div class="logo-icon">
+          <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="16" cy="16" r="14" stroke="url(#lg1)" stroke-width="2"/>
+            <path d="M10 16 L14 20 L22 12" stroke="url(#lg2)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+            <defs>
+              <linearGradient id="lg1" x1="0" y1="0" x2="32" y2="32">
+                <stop offset="0%" stop-color="#7c3aed"/>
+                <stop offset="100%" stop-color="#06b6d4"/>
+              </linearGradient>
+              <linearGradient id="lg2" x1="0" y1="0" x2="32" y2="32">
+                <stop offset="0%" stop-color="#7c3aed"/>
+                <stop offset="100%" stop-color="#06b6d4"/>
+              </linearGradient>
+            </defs>
+          </svg>
+        </div>
+        <span class="logo-text">Deep<span class="accent">Guard</span></span>
+      </div>
+      <nav class="nav-chips">
+        <span class="chip chip--active">Detector</span>
+        <span class="chip" id="nav-about">About</span>
+        <span class="chip" id="nav-paper">IEEE Paper</span>
+      </nav>
+      <div class="header-status">
+        <div class="status-dot" id="api-status-dot"></div>
+        <span id="api-status-text">Connecting…</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ── MAIN ── -->
+  <main class="main" id="main-view">
+
+    <!-- HERO -->
+    <section class="hero">
+      <div class="hero-badge">🧠 Hybrid Spatial-Frequency CNN</div>
+      <h1 class="hero-title">
+        Detect <span class="gradient-text">Deepfake Videos</span><br />with AI Precision
+      </h1>
+      <p class="hero-subtitle">
+        Powered by EfficientNet-B4 + FFT frequency analysis.<br />
+        Per-frame forensic analysis with Grad-CAM explainability.
+      </p>
+    </section>
+
+    <!-- UPLOAD ZONE -->
+    <section class="upload-section" id="upload-section">
+      <div class="upload-card" id="drop-zone">
+        <div class="upload-icon" id="upload-icon">
+          <svg width="64" height="64" viewBox="0 0 64 64" fill="none">
+            <circle cx="32" cy="32" r="30" stroke="url(#ug)" stroke-width="1.5" stroke-dasharray="4 3"/>
+            <path d="M32 42V22M22 32L32 22L42 32" stroke="url(#ug2)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+            <defs>
+              <linearGradient id="ug" x1="2" y1="2" x2="62" y2="62">
+                <stop offset="0%" stop-color="#7c3aed"/>
+                <stop offset="100%" stop-color="#06b6d4"/>
+              </linearGradient>
+              <linearGradient id="ug2" x1="22" y1="22" x2="42" y2="42">
+                <stop offset="0%" stop-color="#7c3aed"/>
+                <stop offset="100%" stop-color="#06b6d4"/>
+              </linearGradient>
+            </defs>
+          </svg>
+        </div>
+        <h2 class="upload-title">Drop your video here</h2>
+        <p class="upload-hint">MP4, AVI, MOV, MKV, WEBM — up to 200 MB</p>
+        <div class="upload-divider"><span>or</span></div>
+        <label class="btn-primary" for="file-input" id="browse-btn">Browse Files</label>
+        <input type="file" id="file-input" accept="video/*" hidden />
+      </div>
+
+      <!-- File Preview -->
+      <div class="file-preview hidden" id="file-preview">
+        <div class="file-info">
+          <div class="file-icon">🎬</div>
+          <div>
+            <div class="file-name" id="file-name"></div>
+            <div class="file-meta" id="file-meta"></div>
+          </div>
+          <button class="btn-remove" id="remove-file" title="Remove">✕</button>
+        </div>
+        <button class="btn-analyze" id="analyze-btn">
+          <span id="analyze-btn-text">🔍 Analyze Video</span>
+          <div class="btn-spinner hidden" id="btn-spinner"></div>
+        </button>
+      </div>
+    </section>
+
+    <!-- PROGRESS -->
+    <section class="progress-section hidden" id="progress-section">
+      <div class="progress-card">
+        <div class="scan-animation">
+          <div class="scan-face">
+            <div class="scan-line"></div>
+            <div class="scan-grid"></div>
+          </div>
+        </div>
+        <h3 class="progress-title">Analyzing video…</h3>
+        <p class="progress-sub" id="progress-sub">Extracting face regions</p>
+        <div class="progress-bar-wrap">
+          <div class="progress-bar" id="progress-bar"></div>
+        </div>
+        <div class="progress-steps">
+          <span class="step active" id="step-1">🎞 Frame sampling</span>
+          <span class="step" id="step-2">👤 Face detection</span>
+          <span class="step" id="step-3">🧠 AI analysis</span>
+          <span class="step" id="step-4">📊 Results ready</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- RESULTS -->
+    <section class="results-section hidden" id="results-section">
+
+      <!-- Verdict Card -->
+      <div class="verdict-card" id="verdict-card">
+        <div class="verdict-ring-wrap">
+          <svg class="verdict-ring" viewBox="0 0 120 120" id="verdict-svg">
+            <circle class="ring-bg"    cx="60" cy="60" r="50" />
+            <circle class="ring-fill"  cx="60" cy="60" r="50" id="ring-fill"/>
+          </svg>
+          <div class="verdict-center">
+            <div class="verdict-icon" id="verdict-icon"></div>
+            <div class="verdict-pct" id="verdict-pct">0%</div>
+            <div class="verdict-label-sm">confidence</div>
+          </div>
+        </div>
+        <div class="verdict-info">
+          <div class="verdict-badge" id="verdict-badge">—</div>
+          <h2 class="verdict-heading" id="verdict-heading">Analyzing…</h2>
+          <p class="verdict-desc" id="verdict-desc"></p>
+          <div class="verdict-stats">
+            <div class="stat-item">
+              <div class="stat-val" id="stat-frames">—</div>
+              <div class="stat-key">Frames Analyzed</div>
+            </div>
+            <div class="stat-item">
+              <div class="stat-val" id="stat-time">—</div>
+              <div class="stat-key">Processing Time</div>
+            </div>
+            <div class="stat-item">
+              <div class="stat-val" id="stat-score">—</div>
+              <div class="stat-key">Raw Score</div>
+            </div>
+          </div>
+          <button class="btn-outline" id="analyze-another">↩ Analyze Another</button>
+        </div>
+      </div>
+
+      <!-- Frame Timeline -->
+      <div class="section-card" id="timeline-card">
+        <h3 class="section-title">📊 Per-Frame Analysis Timeline</h3>
+        <div class="timeline-chart" id="timeline-chart"></div>
+        <div class="timeline-legend">
+          <span class="legend-dot legend-real"></span> Real
+          <span class="legend-dot legend-fake"></span> Fake
+          <span class="legend-dot legend-thresh"></span> Threshold (0.5)
+        </div>
+      </div>
+
+      <!-- GradCAM Gallery -->
+      <div class="section-card" id="gradcam-card">
+        <h3 class="section-title">🔥 Grad-CAM Heatmap Gallery</h3>
+        <p class="section-sub">Highlighted regions show where the AI detected manipulation artifacts</p>
+        <div class="gradcam-gallery" id="gradcam-gallery"></div>
+      </div>
+
+      <!-- Metrics -->
+      <div class="metrics-row">
+        <div class="metric-card" id="mc-auc">
+          <div class="metric-val" id="metric-auc">—</div>
+          <div class="metric-key">AUC Score</div>
+          <div class="metric-desc">Area under ROC curve</div>
+        </div>
+        <div class="metric-card" id="mc-fake-frames">
+          <div class="metric-val" id="metric-fake-frames">—</div>
+          <div class="metric-key">Fake Frames</div>
+          <div class="metric-desc">Frames classified as fake</div>
+        </div>
+        <div class="metric-card" id="mc-real-frames">
+          <div class="metric-val" id="metric-real-frames">—</div>
+          <div class="metric-key">Real Frames</div>
+          <div class="metric-desc">Frames classified as real</div>
+        </div>
+      </div>
+
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

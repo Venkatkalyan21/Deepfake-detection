@@ -1,0 +1,51 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+
+# Virtual environments
+venv/
+env/
+.env
+.venv/
+
+# Model weights (too large for git — upload separately to Render disk)
+*.pth
+*.pt
+*.ckpt
+*.pkl
+models/*.pth
+models/*.pt
+
+# Large datasets
+data/
+Celeb-DF/
+*.zip
+*.tar.gz
+*.tar
+
+# Runtime directories
+backend/uploads/
+backend/results/
+uploads/
+results/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
