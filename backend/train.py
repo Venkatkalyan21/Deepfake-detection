@@ -6,6 +6,10 @@ Usage:
   python train.py --data_dir /path/to/dataset --epochs 30 --batch_size 32
 """
 import argparse, time, os
+try:
+    from tqdm import tqdm
+except ImportError:
+    tqdm = None
 from pathlib import Path
 
 import numpy as np
@@ -77,10 +81,16 @@ def get_sampler(dataset: DeepfakeDataset) -> WeightedRandomSampler:
 def train_epoch(model, loader, optimizer, criterion, device, scaler):
     model.train()
     total_loss, n = 0.0, 0
-    for imgs, labels in loader:
+    total_batches = len(loader)
+
+    iterator = tqdm(loader, desc="  Training", unit="batch",
+                    bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}] loss={postfix}") \
+               if tqdm else loader
+
+    for batch_idx, (imgs, labels) in enumerate(iterator):
         imgs, labels = imgs.to(device), labels.to(device)
         optimizer.zero_grad()
-        with torch.cuda.amp.autocast(enabled=scaler is not None):
+        with torch.amp.autocast(device_type=device, enabled=scaler is not None):
             logits = model(imgs).squeeze(1)
             loss   = criterion(logits, labels)
         if scaler:
@@ -92,6 +102,13 @@ def train_epoch(model, loader, optimizer, criterion, device, scaler):
             optimizer.step()
         total_loss += loss.item() * imgs.size(0)
         n += imgs.size(0)
+        # Update tqdm with current avg loss
+        if tqdm and hasattr(iterator, 'set_postfix_str'):
+            iterator.set_postfix_str(f"{total_loss/n:.4f}")
+        elif not tqdm and (batch_idx % 50 == 0 or batch_idx == total_batches - 1):
+            pct = (batch_idx + 1) / total_batches * 100
+            print(f"    Batch {batch_idx+1}/{total_batches} ({pct:.0f}%)  avg_loss={total_loss/n:.4f}",
+                  flush=True)
     return total_loss / n
 
 
@@ -133,7 +150,7 @@ def main():
     sampler  = get_sampler(train_ds)
 
     # num_workers=0 avoids Windows multiprocessing issues
-    train_dl = DataLoader(train_ds, batch_size=args.batch_size, sampler=sampler,  num_workers=0, pin_memory=False)
+    train_dl = DataLoader(train_ds, batch_size=args.batch_size, sampler=sampler,  num_workers=0, pin_memory=False, drop_last=True)
     val_dl   = DataLoader(val_ds,   batch_size=args.batch_size, shuffle=False, num_workers=0)
 
     print(f"[Train] Train samples: {len(train_ds)} | Val samples: {len(val_ds)}")
