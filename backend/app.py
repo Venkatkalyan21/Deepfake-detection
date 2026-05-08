@@ -1,5 +1,6 @@
 """
-FastAPI Server — Deepfake Detection REST API
+DeepShield — Multi-Modal Deepfake Detection API
+FastAPI server handling Video, Image, and Audio deepfake detection.
 Run: uvicorn app:app --host 0.0.0.0 --port 8000 --reload
 """
 import os, shutil, uuid
@@ -10,99 +11,161 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse, FileResponse
 
-from detector import DeepfakeDetector
+from multimodal_detector import MultiModalDetector
 
-# ── Setup directories ───────────────────────────────────────────────
+# ── Setup directories ─────────────────────────────────────────────
 for d in ["uploads", "results", "models"]:
     Path(d).mkdir(exist_ok=True)
 
-# ── App ─────────────────────────────────────────────────────────────
+# ── App ───────────────────────────────────────────────────────────
 app = FastAPI(
-    title="Deepfake Detection API",
-    description="Hybrid Spatial-Frequency CNN for deepfake video detection",
-    version="1.0.0",
+    title       = "DeepShield API",
+    description = "Multi-Modal AI-Based Deepfake Detection — Video, Image & Audio",
+    version     = "2.0.0",
 )
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins  = ["*"],
+    allow_methods  = ["*"],
+    allow_headers  = ["*"],
 )
 
-# Serve result images (Grad-CAM heatmaps)
+# Serve Grad-CAM heatmaps
 app.mount("/results", StaticFiles(directory="results"), name="results")
 
-# ── Load detector once at startup ───────────────────────────────────
-MODEL_PATH = os.getenv("MODEL_PATH", "models/deepfake_model.pth")
-MODEL_EXISTS = Path(MODEL_PATH).exists()
+# ── Load detector once at startup ─────────────────────────────────
+VIDEO_MODEL = os.getenv("VIDEO_MODEL_PATH", "models/deepfake_model.pth")
+IMAGE_MODEL = os.getenv("IMAGE_MODEL_PATH", "models/image_model_best.pth")
+AUDIO_MODEL = os.getenv("AUDIO_MODEL_PATH", "models/audio_model_best.pth")
+THRESHOLD   = float(os.getenv("THRESHOLD", "0.5"))
 
-detector = DeepfakeDetector(
-    model_path=MODEL_PATH if MODEL_EXISTS else None,
-    max_frames=32,
-    # Use higher threshold in demo mode to avoid false positives on real videos
-    threshold=0.5 if MODEL_EXISTS else 0.80,
+detector = MultiModalDetector(
+    video_model_path = VIDEO_MODEL if Path(VIDEO_MODEL).exists() else None,
+    image_model_path = IMAGE_MODEL if Path(IMAGE_MODEL).exists() else None,
+    audio_model_path = AUDIO_MODEL if Path(AUDIO_MODEL).exists() else None,
+    threshold        = THRESHOLD,
 )
 
-ALLOWED_EXTS = {".mp4", ".avi", ".mov", ".mkv", ".webm"}
-MAX_FILE_MB  = 200
+# ── Allowed file types ────────────────────────────────────────────
+VIDEO_EXTS = {".mp4", ".avi", ".mov", ".mkv", ".webm"}
+IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".bmp"}
+AUDIO_EXTS = {".wav", ".mp3", ".flac", ".ogg", ".m4a"}
+MAX_MB     = {"video": 500, "image": 20, "audio": 50}
 
 
-# ── Endpoints ────────────────────────────────────────────────────────
+async def save_upload(file: UploadFile, session_id: str, ext: str) -> Path:
+    upload_dir = Path("uploads") / session_id
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    dest = upload_dir / f"input{ext}"
+    content = await file.read()
+    dest.write_bytes(content)
+    return dest, len(content)
+
+
+# ═══════════════════════════════════════════════════════════════════
+# ENDPOINTS
+# ═══════════════════════════════════════════════════════════════════
 
 @app.get("/health")
 def health():
     return {
-        "status":    "ok",
-        "model":     "HybridDeepfakeDetector",
-        "device":    detector.device,
-        "version":   "1.0.0",
-        "demo_mode": not MODEL_EXISTS,   # True = no trained weights loaded
-        "threshold": detector.threshold,
-        "warning":   "No trained model found — results unreliable!" if not MODEL_EXISTS else "Trained model loaded OK",
+        "status":          "ok",
+        "system":          "DeepShield v2.0",
+        "device":          detector.device,
+        "video_model":     "Loaded" if Path(VIDEO_MODEL).exists() else "Demo mode",
+        "image_model":     "Loaded" if Path(IMAGE_MODEL).exists() else "Demo mode",
+        "audio_available": detector.audio_available,
+        "modalities":      ["video", "image", "audio"],
     }
 
 
-@app.post("/detect")
-async def detect(file: UploadFile = File(...)):
-    # Validate file type
+# ── VIDEO Detection ───────────────────────────────────────────────
+@app.post("/detect/video")
+async def detect_video(file: UploadFile = File(...)):
     suffix = Path(file.filename).suffix.lower()
-    if suffix not in ALLOWED_EXTS:
-        raise HTTPException(400, f"Unsupported file type: {suffix}. "
-                                 f"Allowed: {ALLOWED_EXTS}")
+    if suffix not in VIDEO_EXTS:
+        raise HTTPException(400, f"Unsupported video type: {suffix}. Allowed: {VIDEO_EXTS}")
 
-    # Validate file size
-    content = await file.read()
-    size_mb = len(content) / (1024 * 1024)
-    if size_mb > MAX_FILE_MB:
-        raise HTTPException(413, f"File too large ({size_mb:.1f} MB). Max {MAX_FILE_MB} MB.")
-
-    # Save to disk
     session_id = str(uuid.uuid4())
-    upload_dir = Path("uploads") / session_id
-    upload_dir.mkdir(parents=True, exist_ok=True)
-    video_path = upload_dir / file.filename
+    dest, size = await save_upload(file, session_id, suffix)
+    size_mb = size / (1024 * 1024)
+    if size_mb > MAX_MB["video"]:
+        shutil.rmtree(dest.parent, ignore_errors=True)
+        raise HTTPException(413, f"File too large ({size_mb:.1f} MB). Max {MAX_MB['video']} MB.")
 
-    with open(video_path, "wb") as f:
-        f.write(content)
-
-    # Run detection
     try:
-        result = detector.analyze(str(video_path), session_id=session_id)
+        result = detector.analyze_video(str(dest), session_id=session_id)
     except Exception as e:
-        shutil.rmtree(upload_dir, ignore_errors=True)
-        raise HTTPException(500, f"Detection error: {str(e)}")
+        shutil.rmtree(dest.parent, ignore_errors=True)
+        raise HTTPException(500, f"Detection error: {e}")
 
     return JSONResponse(content=result)
 
 
+# ── IMAGE Detection ───────────────────────────────────────────────
+@app.post("/detect/image")
+async def detect_image(file: UploadFile = File(...)):
+    suffix = Path(file.filename).suffix.lower()
+    if suffix not in IMAGE_EXTS:
+        raise HTTPException(400, f"Unsupported image type: {suffix}. Allowed: {IMAGE_EXTS}")
+
+    session_id = str(uuid.uuid4())
+    dest, size = await save_upload(file, session_id, suffix)
+    size_mb = size / (1024 * 1024)
+    if size_mb > MAX_MB["image"]:
+        shutil.rmtree(dest.parent, ignore_errors=True)
+        raise HTTPException(413, f"File too large ({size_mb:.1f} MB). Max {MAX_MB['image']} MB.")
+
+    try:
+        result = detector.analyze_image(str(dest))
+        result["session_id"] = session_id
+    except Exception as e:
+        shutil.rmtree(dest.parent, ignore_errors=True)
+        raise HTTPException(500, f"Detection error: {e}")
+
+    return JSONResponse(content=result)
+
+
+# ── AUDIO Detection ───────────────────────────────────────────────
+@app.post("/detect/audio")
+async def detect_audio(file: UploadFile = File(...)):
+    suffix = Path(file.filename).suffix.lower()
+    if suffix not in AUDIO_EXTS:
+        raise HTTPException(400, f"Unsupported audio type: {suffix}. Allowed: {AUDIO_EXTS}")
+
+    session_id = str(uuid.uuid4())
+    dest, size = await save_upload(file, session_id, suffix)
+    size_mb = size / (1024 * 1024)
+    if size_mb > MAX_MB["audio"]:
+        shutil.rmtree(dest.parent, ignore_errors=True)
+        raise HTTPException(413, f"File too large ({size_mb:.1f} MB). Max {MAX_MB['audio']} MB.")
+
+    try:
+        result = detector.analyze_audio(str(dest))
+        result["session_id"] = session_id
+    except Exception as e:
+        shutil.rmtree(dest.parent, ignore_errors=True)
+        raise HTTPException(500, f"Detection error: {e}")
+
+    return JSONResponse(content=result)
+
+
+# ── Legacy /detect endpoint (backward compat — video) ────────────
+@app.post("/detect")
+async def detect_legacy(file: UploadFile = File(...)):
+    """Backward-compatible video detection endpoint."""
+    return await detect_video(file)
+
+
+# ── Results & cleanup ─────────────────────────────────────────────
 @app.get("/results/{session_id}")
 def get_results(session_id: str):
     result_dir = Path("results") / session_id
     if not result_dir.exists():
         raise HTTPException(404, "Session not found.")
-    files = list(result_dir.glob("*.jpg"))
-    return {"session_id": session_id, "heatmaps": [str(f) for f in files]}
+    files = [str(f) for f in result_dir.glob("*.jpg")]
+    return {"session_id": session_id, "heatmaps": files}
 
 
 @app.delete("/session/{session_id}")
@@ -112,7 +175,7 @@ def delete_session(session_id: str):
     return {"deleted": session_id}
 
 
-# ── Serve Frontend UI ────────────────────────────────────────────────
+# ── Serve Frontend ────────────────────────────────────────────────
 FRONTEND_DIR = Path(__file__).parent.parent / "frontend"
 
 @app.get("/")
@@ -120,7 +183,7 @@ def serve_ui():
     index = FRONTEND_DIR / "index.html"
     if index.exists():
         return FileResponse(str(index))
-    return {"message": "DeepGuard API running. Open frontend/index.html manually."}
+    return {"message": "DeepShield API v2.0 running. Open frontend/index.html manually."}
 
 @app.get("/style.css")
 def serve_css():
