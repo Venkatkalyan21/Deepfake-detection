@@ -226,12 +226,12 @@ class ImageDeepfakeDetector:
         verdict = "FAKE" if prob >= self.threshold else "REAL"
 
         return {
-            "verdict":       verdict,
-            "confidence":    round(prob * 100, 2),
-            "fake_prob":     round(prob, 4),
-            "face_detected": face_detected,
-            "image_size":    f"{w}×{h}",
-            "modality":      "image",
+            "verdict":        verdict,
+            "confidence":     round(prob, 4),
+            "fake_prob":      round(prob, 4),
+            "faces_detected": 1 if face_detected else 0,
+            "image_size":     f"{w}×{h}",
+            "modality":       "image",
         }
 
 

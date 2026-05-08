@@ -162,10 +162,10 @@ class MultiModalDetector:
             "visual_confidence":  round(visual_score * 100, 2),
             "visual_verdict":     "FAKE" if visual_score >= self.threshold else "REAL",
             "fused_fake_prob":    round(fused_score, 4),
-            "fused_confidence":   round(fused_score * 100, 2),
+            "fused_confidence":   round(fused_score, 4),
             "fused_verdict":      fused_verdict,
             "verdict":            fused_verdict,
-            "confidence":         round(fused_score * 100, 2),
+            "confidence":         round(fused_score, 4),
             "fake_prob":          round(fused_score, 4),
             "elapsed_sec":        round(time.time() - t0, 2),
             "modality":           "video",
@@ -192,7 +192,7 @@ class MultiModalDetector:
             prob     = self.audio_model.predict_proba(waveform, self.device)
             return {
                 "verdict":    "FAKE" if prob >= self.threshold else "REAL",
-                "confidence": round(prob * 100, 2),
+                "confidence": round(prob, 4),
                 "fake_prob":  round(prob, 4),
                 "modality":   "audio",
             }

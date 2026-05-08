@@ -1,38 +1,32 @@
 """
-DeepShield — Multi-Modal Deepfake Detection API
-FastAPI server handling Video, Image, and Audio deepfake detection.
-Run: uvicorn app:app --host 0.0.0.0 --port 8000 --reload
+DeepShield — Multi-Modal Deepfake Detection API (Flask)
+Flask server handling Video, Image, and Audio deepfake detection with MongoDB integration.
 """
-import os, shutil, uuid
+import os
+import shutil
+import uuid
 from pathlib import Path
+from dotenv import load_dotenv
 
-from fastapi import FastAPI, UploadFile, File, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import JSONResponse, FileResponse
+from flask import Flask, request, jsonify, send_from_directory
+from flask_cors import CORS
+from werkzeug.utils import secure_filename
 
 from multimodal_detector import MultiModalDetector
+from db import save_detection, get_recent_detections
+
+load_dotenv()
 
 # ── Setup directories ─────────────────────────────────────────────
 for d in ["uploads", "results", "models"]:
     Path(d).mkdir(exist_ok=True)
 
 # ── App ───────────────────────────────────────────────────────────
-app = FastAPI(
-    title       = "DeepShield API",
-    description = "Multi-Modal AI-Based Deepfake Detection — Video, Image & Audio",
-    version     = "2.0.0",
-)
+app = Flask(__name__)
+CORS(app)  # Enable CORS for all routes
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins  = ["*"],
-    allow_methods  = ["*"],
-    allow_headers  = ["*"],
-)
-
-# Serve Grad-CAM heatmaps
-app.mount("/results", StaticFiles(directory="results"), name="results")
+app.config['UPLOAD_FOLDER'] = 'uploads'
+app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024  # 500 MB max limit
 
 # ── Load detector once at startup ─────────────────────────────────
 VIDEO_MODEL = os.getenv("VIDEO_MODEL_PATH", "models/deepfake_model.pth")
@@ -53,142 +47,174 @@ IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".bmp"}
 AUDIO_EXTS = {".wav", ".mp3", ".flac", ".ogg", ".m4a"}
 MAX_MB     = {"video": 500, "image": 20, "audio": 50}
 
-
-async def save_upload(file: UploadFile, session_id: str, ext: str) -> Path:
+def save_upload(file, session_id, ext):
     upload_dir = Path("uploads") / session_id
     upload_dir.mkdir(parents=True, exist_ok=True)
+    filename = secure_filename(file.filename)
     dest = upload_dir / f"input{ext}"
-    content = await file.read()
-    dest.write_bytes(content)
-    return dest, len(content)
-
+    file.save(str(dest))
+    return dest, os.path.getsize(str(dest)), filename
 
 # ═══════════════════════════════════════════════════════════════════
 # ENDPOINTS
 # ═══════════════════════════════════════════════════════════════════
 
-@app.get("/health")
+@app.route("/health", methods=["GET"])
 def health():
-    return {
+    return jsonify({
         "status":          "ok",
-        "system":          "DeepShield v2.0",
+        "system":          "DeepShield v2.0 (Flask)",
         "device":          detector.device,
         "video_model":     "Loaded" if Path(VIDEO_MODEL).exists() else "Demo mode",
         "image_model":     "Loaded" if Path(IMAGE_MODEL).exists() else "Demo mode",
         "audio_available": detector.audio_available,
         "modalities":      ["video", "image", "audio"],
-    }
+    })
 
+@app.route("/history", methods=["GET"])
+def get_history():
+    limit = request.args.get('limit', default=50, type=int)
+    history = get_recent_detections(limit)
+    return jsonify({
+        "total": len(history),
+        "history": history
+    })
 
 # ── VIDEO Detection ───────────────────────────────────────────────
-@app.post("/detect/video")
-async def detect_video(file: UploadFile = File(...)):
+@app.route("/detect/video", methods=["POST"])
+def detect_video():
+    if 'file' not in request.files:
+        return jsonify({"detail": "No file part"}), 400
+    
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({"detail": "No selected file"}), 400
+
     suffix = Path(file.filename).suffix.lower()
     if suffix not in VIDEO_EXTS:
-        raise HTTPException(400, f"Unsupported video type: {suffix}. Allowed: {VIDEO_EXTS}")
+        return jsonify({"detail": f"Unsupported video type: {suffix}. Allowed: {VIDEO_EXTS}"}), 400
 
     session_id = str(uuid.uuid4())
-    dest, size = await save_upload(file, session_id, suffix)
+    dest, size, orig_filename = save_upload(file, session_id, suffix)
     size_mb = size / (1024 * 1024)
     if size_mb > MAX_MB["video"]:
         shutil.rmtree(dest.parent, ignore_errors=True)
-        raise HTTPException(413, f"File too large ({size_mb:.1f} MB). Max {MAX_MB['video']} MB.")
+        return jsonify({"detail": f"File too large ({size_mb:.1f} MB). Max {MAX_MB['video']} MB."}), 413
 
     try:
         result = detector.analyze_video(str(dest), session_id=session_id)
+        # Save to MongoDB
+        save_detection(
+            session_id=session_id,
+            filename=orig_filename,
+            modality="video",
+            verdict=result.get("verdict"),
+            confidence=result.get("confidence"),
+            details={"frames_analyzed": result.get("frames_analyzed")}
+        )
     except Exception as e:
         shutil.rmtree(dest.parent, ignore_errors=True)
-        raise HTTPException(500, f"Detection error: {e}")
+        return jsonify({"detail": f"Detection error: {e}"}), 500
 
-    return JSONResponse(content=result)
-
+    return jsonify(result)
 
 # ── IMAGE Detection ───────────────────────────────────────────────
-@app.post("/detect/image")
-async def detect_image(file: UploadFile = File(...)):
+@app.route("/detect/image", methods=["POST"])
+def detect_image():
+    if 'file' not in request.files:
+        return jsonify({"detail": "No file part"}), 400
+        
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({"detail": "No selected file"}), 400
+
     suffix = Path(file.filename).suffix.lower()
     if suffix not in IMAGE_EXTS:
-        raise HTTPException(400, f"Unsupported image type: {suffix}. Allowed: {IMAGE_EXTS}")
+        return jsonify({"detail": f"Unsupported image type: {suffix}. Allowed: {IMAGE_EXTS}"}), 400
 
     session_id = str(uuid.uuid4())
-    dest, size = await save_upload(file, session_id, suffix)
+    dest, size, orig_filename = save_upload(file, session_id, suffix)
     size_mb = size / (1024 * 1024)
     if size_mb > MAX_MB["image"]:
         shutil.rmtree(dest.parent, ignore_errors=True)
-        raise HTTPException(413, f"File too large ({size_mb:.1f} MB). Max {MAX_MB['image']} MB.")
+        return jsonify({"detail": f"File too large ({size_mb:.1f} MB). Max {MAX_MB['image']} MB."}), 413
 
     try:
         result = detector.analyze_image(str(dest))
         result["session_id"] = session_id
+        # Save to MongoDB
+        save_detection(
+            session_id=session_id,
+            filename=orig_filename,
+            modality="image",
+            verdict=result.get("verdict"),
+            confidence=result.get("confidence"),
+            details={"faces_detected": result.get("faces_detected", 1)}
+        )
     except Exception as e:
         shutil.rmtree(dest.parent, ignore_errors=True)
-        raise HTTPException(500, f"Detection error: {e}")
+        return jsonify({"detail": f"Detection error: {e}"}), 500
 
-    return JSONResponse(content=result)
-
+    return jsonify(result)
 
 # ── AUDIO Detection ───────────────────────────────────────────────
-@app.post("/detect/audio")
-async def detect_audio(file: UploadFile = File(...)):
+@app.route("/detect/audio", methods=["POST"])
+def detect_audio():
+    if 'file' not in request.files:
+        return jsonify({"detail": "No file part"}), 400
+        
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({"detail": "No selected file"}), 400
+
     suffix = Path(file.filename).suffix.lower()
     if suffix not in AUDIO_EXTS:
-        raise HTTPException(400, f"Unsupported audio type: {suffix}. Allowed: {AUDIO_EXTS}")
+        return jsonify({"detail": f"Unsupported audio type: {suffix}. Allowed: {AUDIO_EXTS}"}), 400
 
     session_id = str(uuid.uuid4())
-    dest, size = await save_upload(file, session_id, suffix)
+    dest, size, orig_filename = save_upload(file, session_id, suffix)
     size_mb = size / (1024 * 1024)
     if size_mb > MAX_MB["audio"]:
         shutil.rmtree(dest.parent, ignore_errors=True)
-        raise HTTPException(413, f"File too large ({size_mb:.1f} MB). Max {MAX_MB['audio']} MB.")
+        return jsonify({"detail": f"File too large ({size_mb:.1f} MB). Max {MAX_MB['audio']} MB."}), 413
 
     try:
         result = detector.analyze_audio(str(dest))
         result["session_id"] = session_id
+        # Save to MongoDB
+        save_detection(
+            session_id=session_id,
+            filename=orig_filename,
+            modality="audio",
+            verdict=result.get("verdict"),
+            confidence=result.get("confidence")
+        )
     except Exception as e:
         shutil.rmtree(dest.parent, ignore_errors=True)
-        raise HTTPException(500, f"Detection error: {e}")
+        return jsonify({"detail": f"Detection error: {e}"}), 500
 
-    return JSONResponse(content=result)
-
-
-# ── Legacy /detect endpoint (backward compat — video) ────────────
-@app.post("/detect")
-async def detect_legacy(file: UploadFile = File(...)):
-    """Backward-compatible video detection endpoint."""
-    return await detect_video(file)
-
+    return jsonify(result)
 
 # ── Results & cleanup ─────────────────────────────────────────────
-@app.get("/results/{session_id}")
-def get_results(session_id: str):
+@app.route("/results/<session_id>/<filename>", methods=["GET"])
+def get_result_file(session_id, filename):
+    result_dir = Path("results") / session_id
+    return send_from_directory(str(result_dir), filename)
+
+@app.route("/results/<session_id>", methods=["GET"])
+def get_results(session_id):
     result_dir = Path("results") / session_id
     if not result_dir.exists():
-        raise HTTPException(404, "Session not found.")
-    files = [str(f) for f in result_dir.glob("*.jpg")]
-    return {"session_id": session_id, "heatmaps": files}
+        return jsonify({"detail": "Session not found."}), 404
+    files = [f.name for f in result_dir.glob("*.jpg")]
+    return jsonify({"session_id": session_id, "heatmaps": files})
 
-
-@app.delete("/session/{session_id}")
-def delete_session(session_id: str):
+@app.route("/session/<session_id>", methods=["DELETE"])
+def delete_session(session_id):
     for d in ["uploads", "results"]:
         shutil.rmtree(Path(d) / session_id, ignore_errors=True)
-    return {"deleted": session_id}
+    return jsonify({"deleted": session_id})
 
-
-# ── Serve Frontend ────────────────────────────────────────────────
-FRONTEND_DIR = Path(__file__).parent.parent / "frontend"
-
-@app.get("/")
-def serve_ui():
-    index = FRONTEND_DIR / "index.html"
-    if index.exists():
-        return FileResponse(str(index))
-    return {"message": "DeepShield API v2.0 running. Open frontend/index.html manually."}
-
-@app.get("/style.css")
-def serve_css():
-    return FileResponse(str(FRONTEND_DIR / "style.css"), media_type="text/css")
-
-@app.get("/app.js")
-def serve_js():
-    return FileResponse(str(FRONTEND_DIR / "app.js"), media_type="application/javascript")
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port, debug=True)
