@@ -1,6 +1,6 @@
 import { CircularProgressbar, buildStyles } from 'react-circular-progressbar'
 import 'react-circular-progressbar/dist/styles.css'
-import { AlertTriangle, CheckCircle, HelpCircle, Activity } from 'lucide-react'
+import { AlertTriangle, CheckCircle, HelpCircle, Activity, Film } from 'lucide-react'
 
 export default function ResultPanel({ result, loading }) {
   if (loading) {
@@ -43,65 +43,121 @@ export default function ResultPanel({ result, loading }) {
   const percentage = Math.round((confidence || 0) * 100)
 
   return (
-    <div className="glass p-8 rounded-2xl animate-slide-up relative overflow-hidden">
+    <div className="glass p-6 animate-slide-up relative overflow-hidden flex flex-col h-full justify-between">
       {/* Background glow based on verdict */}
       <div 
-        className="absolute -top-40 -right-40 w-96 h-96 rounded-full blur-3xl opacity-10 pointer-events-none"
+        className="absolute -top-40 -right-40 w-96 h-96 rounded-full blur-3xl opacity-5 pointer-events-none"
         style={{ backgroundColor: color }}
       />
 
-      <div className="flex flex-col md:flex-row items-center gap-8 relative z-10">
-        {/* Gauge */}
-        <div className="w-48 h-48 shrink-0 relative">
+      <div className="flex flex-col md:flex-row gap-6 relative z-10">
+        
+        {/* Gauge / Radar Area */}
+        <div className="w-40 h-40 shrink-0 relative flex flex-col items-center justify-center border border-white/5 bg-dark-950 p-4">
+          <div className="absolute top-0 left-0 w-2 h-2 border-t border-l border-white/20" />
+          <div className="absolute bottom-0 right-0 w-2 h-2 border-b border-r border-white/20" />
+          
           <CircularProgressbar
             value={percentage}
             text={`${percentage}%`}
             styles={buildStyles({
               pathColor: color,
-              textColor: '#fff',
+              textColor: color,
               trailColor: 'rgba(255,255,255,0.05)',
               pathTransitionDuration: 1.5,
               textSize: '18px',
             })}
           />
-          <p className="text-center text-xs text-white/50 mt-4 uppercase tracking-wider font-semibold">
-            Confidence Score
+          <p className="text-[10px] font-mono text-white/40 mt-3 tracking-widest text-center">
+            CONFIDENCE_IDX
           </p>
         </div>
 
-        {/* Details */}
-        <div className="flex-1 text-center md:text-left">
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-xs font-semibold uppercase tracking-wider text-white/70 mb-4">
-            <span className="w-2 h-2 rounded-full bg-primary-500" />
-            {modality} Analysis
+        {/* Data Readout Area */}
+        <div className="flex-1 flex flex-col">
+          <div className="flex items-center justify-between mb-2 pb-2 border-b border-white/10">
+            <div className="inline-flex items-center gap-2 px-2 py-1 bg-primary-500/10 border border-primary-500/20 text-[10px] font-mono text-primary-400 uppercase tracking-widest">
+              <span className="w-1.5 h-1.5 rounded-full bg-primary-400 animate-pulse" />
+              MODALITY: {modality}
+            </div>
+            <div className="text-[10px] font-mono text-white/30">
+              ID: {result.session_id ? result.session_id.split('-')[0] : 'N/A'}
+            </div>
           </div>
 
-          <h2 className="text-4xl font-black text-white mb-2 flex items-center justify-center md:justify-start gap-3">
-            <Icon className="w-10 h-10" style={{ color }} />
-            <span style={{ color }}>{verdict}</span>
+          <h2 className="text-3xl font-mono font-bold flex items-center gap-3 mt-2" style={{ color }}>
+            <Icon className="w-8 h-8" />
+            {verdict}
           </h2>
           
-          <p className="text-white/60 mb-6 max-w-md">
+          <p className="text-[11px] font-mono text-white/50 mt-3 max-w-md leading-relaxed border-l-2 border-white/10 pl-3">
             {isFake 
-              ? "High probability of AI manipulation detected. The media exhibits characteristics consistent with deepfake generation."
+              ? "CRITICAL: Neural artifacts and frequency anomalies detected. Metadata indicates synthetic generation via deep learning architecture."
               : isReal
-              ? "No significant AI manipulation detected. The media appears to be authentic."
-              : "Analysis inconclusive. Unable to make a definitive determination."}
+              ? "CLEAR: Media entropy levels normal. No significant adversarial perturbations or facial manipulation artifacts detected."
+              : "UNKNOWN: Insufficient tensor data to compute conclusive confidence matrix."}
           </p>
 
-          {/* Breakdown / Details */}
+          {/* Detailed Telemetry Grid */}
           {details && (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-2 mt-4">
               {Object.entries(details).map(([key, val]) => (
-                <div key={key} className="bg-white/5 border border-white/5 rounded-xl p-3">
-                  <p className="text-xs text-white/40 uppercase tracking-wider mb-1">{key.replace(/_/g, ' ')}</p>
-                  <p className="text-sm font-medium text-white">{val}</p>
+                <div key={key} className="bg-dark-950 border border-white/5 p-2 flex justify-between items-center">
+                  <span className="text-[9px] font-mono text-white/40 uppercase">{key.replace(/_/g, ' ')}</span>
+                  <span className="text-[10px] font-mono text-white font-bold">{val}</span>
                 </div>
               ))}
             </div>
           )}
         </div>
       </div>
+
+      {/* Frame-by-frame breakdown (Videos only) */}
+      {result.frame_scores && result.frame_scores.length > 0 && (
+        <div className="mt-10 pt-8 border-t border-white/5 relative z-10">
+          <h3 className="text-sm font-semibold text-white/70 uppercase tracking-wider mb-4 flex items-center gap-2">
+            <Film className="w-4 h-4" />
+            Frame Analysis Timeline
+          </h3>
+          
+          <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-thin">
+            {result.frame_scores.map((frame, idx) => {
+              const isFrameFake = frame.verdict === 'FAKE'
+              const frameColor = isFrameFake ? 'text-red-400' : 'text-green-400'
+              const frameBg = isFrameFake ? 'bg-red-500/20 border-red-500/30' : 'bg-green-500/20 border-green-500/30'
+              const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000'
+              
+              return (
+                <div key={idx} className="shrink-0 w-32 glass rounded-xl overflow-hidden flex flex-col group">
+                  {/* Grad-CAM Heatmap */}
+                  <div className="h-24 bg-dark-900 relative overflow-hidden">
+                    <img 
+                      src={`${API_URL}${frame.cam_path}`} 
+                      alt={`Frame ${frame.frame_idx}`}
+                      className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500 opacity-80"
+                      onError={(e) => { e.target.style.display = 'none' }}
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-dark-900 via-transparent to-transparent opacity-80" />
+                    <span className="absolute bottom-1 left-2 text-[10px] font-mono text-white/70">
+                      FRM {frame.frame_idx}
+                    </span>
+                  </div>
+                  
+                  {/* Frame Stats */}
+                  <div className={`p-2 border-t flex flex-col items-center justify-center ${frameBg}`}>
+                    <span className={`text-xs font-bold ${frameColor}`}>
+                      {frame.verdict}
+                    </span>
+                    <span className="text-[10px] font-mono text-white/50 mt-0.5">
+                      {Math.round(frame.fake_prob * 100)}% FAKE
+                    </span>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

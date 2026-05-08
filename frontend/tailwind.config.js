@@ -5,54 +5,44 @@ export default {
     extend: {
       fontFamily: {
         sans: ["Inter", "system-ui", "sans-serif"],
+        mono: ["Fira Code", "JetBrains Mono", "monospace"],
       },
       colors: {
         primary: {
-          50:  "#f0f4ff",
-          100: "#e0eaff",
-          200: "#c7d7fd",
-          300: "#a5b9fb",
-          400: "#818cf8",
-          500: "#6366f1",
-          600: "#4f46e5",
-          700: "#4338ca",
-          800: "#3730a3",
-          900: "#312e81",
+          400: "#00f0ff", // Electric Cyan
+          500: "#00c3ff",
+          600: "#0096ff",
         },
         danger: {
-          400: "#f87171",
-          500: "#ef4444",
-          600: "#dc2626",
+          400: "#ff2a2a",
+          500: "#e60000",
+          600: "#cc0000",
         },
         success: {
-          400: "#4ade80",
-          500: "#22c55e",
-          600: "#16a34a",
+          400: "#00ff88",
+          500: "#00cc6a",
+          600: "#009950",
         },
         dark: {
-          800: "#0f1117",
-          900: "#070b14",
-          950: "#03060d",
+          800: "#111827",
+          900: "#0a1128", // Navy/black base
+          950: "#040814",
         },
       },
       animation: {
-        "pulse-slow": "pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite",
-        "spin-slow": "spin 8s linear infinite",
-        "fade-in": "fadeIn 0.5s ease-out",
-        "slide-up": "slideUp 0.4s ease-out",
-        "glow": "glow 2s ease-in-out infinite alternate",
+        "scanline": "scanline 8s linear infinite",
+        "fade-in": "fadeIn 0.3s ease-out",
+        "glitch": "glitch 1s linear infinite",
       },
       keyframes: {
         fadeIn: { "0%": { opacity: "0" }, "100%": { opacity: "1" } },
-        slideUp: { "0%": { transform: "translateY(20px)", opacity: "0" }, "100%": { transform: "translateY(0)", opacity: "1" } },
-        glow: {
-          "0%": { boxShadow: "0 0 5px #6366f1, 0 0 10px #6366f1" },
-          "100%": { boxShadow: "0 0 20px #6366f1, 0 0 40px #6366f1" },
+        scanline: {
+          "0%": { transform: "translateY(-100%)" },
+          "100%": { transform: "translateY(1000%)" },
         },
       },
       backgroundImage: {
-        "gradient-radial": "radial-gradient(var(--tw-gradient-stops))",
-        "hero-gradient": "linear-gradient(135deg, #070b14 0%, #0f1117 40%, #1a1040 100%)",
+        "grid-pattern": "linear-gradient(to right, #ffffff05 1px, transparent 1px), linear-gradient(to bottom, #ffffff05 1px, transparent 1px)",
       },
     },
   },

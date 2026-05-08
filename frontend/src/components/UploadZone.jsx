@@ -1,18 +1,12 @@
 import { useCallback, useState } from 'react'
 import { useDropzone } from 'react-dropzone'
-import { Upload, Film, Image, Mic, X, FileVideo, FileImage, FileAudio } from 'lucide-react'
+import { Crosshair, Film, Image as ImageIcon, Mic, X } from 'lucide-react'
 
 const MODES = [
-  { id: 'video', label: 'Video', icon: Film, accept: { 'video/*': ['.mp4', '.avi', '.mov', '.mkv', '.webm'] }, color: 'from-blue-500 to-cyan-500', bg: 'bg-blue-500/10', border: 'border-blue-500/30' },
-  { id: 'image', label: 'Image', icon: Image, accept: { 'image/*': ['.jpg', '.jpeg', '.png', '.webp', '.bmp'] }, color: 'from-purple-500 to-pink-500', bg: 'bg-purple-500/10', border: 'border-purple-500/30' },
-  { id: 'audio', label: 'Audio', icon: Mic,   accept: { 'audio/*': ['.wav', '.mp3', '.flac', '.ogg', '.m4a'] }, color: 'from-amber-500 to-orange-500', bg: 'bg-amber-500/10', border: 'border-amber-500/30' },
+  { id: 'video', label: 'VIDEO', icon: Film, accept: { 'video/*': ['.mp4', '.avi', '.mov', '.mkv', '.webm'] } },
+  { id: 'image', label: 'IMAGE', icon: ImageIcon, accept: { 'image/*': ['.jpg', '.jpeg', '.png', '.webp', '.bmp'] } },
+  { id: 'audio', label: 'AUDIO', icon: Mic, accept: { 'audio/*': ['.wav', '.mp3', '.flac', '.ogg', '.m4a'] } },
 ]
-
-const FileIcon = ({ mode }) => {
-  if (mode === 'video') return <FileVideo className="w-10 h-10 text-blue-400" />
-  if (mode === 'image') return <FileImage className="w-10 h-10 text-purple-400" />
-  return <FileAudio className="w-10 h-10 text-amber-400" />
-}
 
 export default function UploadZone({ onAnalyze, loading }) {
   const [activeMode, setActiveMode] = useState('video')
@@ -32,19 +26,18 @@ export default function UploadZone({ onAnalyze, loading }) {
     disabled: loading,
   })
 
-  const handleAnalyze = () => {
-    if (file) onAnalyze(file, activeMode, setUploadPct)
-  }
-
-  const formatSize = bytes => {
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-  }
-
   return (
-    <div className="glass p-6 rounded-2xl animate-fade-in">
-      {/* Mode tabs */}
-      <div className="flex gap-2 mb-6">
+    <div className="glass p-5 flex flex-col h-full animate-fade-in relative">
+      <div className="absolute top-0 right-0 p-2 text-[10px] font-mono text-primary-400/30">
+        TARGET_ACQUISITION_MOD
+      </div>
+
+      <h2 className="text-sm font-mono font-bold text-white mb-4 uppercase tracking-widest border-b border-primary-500/20 pb-2">
+        Data Stream Input
+      </h2>
+
+      {/* Mode selection */}
+      <div className="grid grid-cols-3 gap-2 mb-6">
         {MODES.map(m => {
           const Icon = m.icon
           const active = m.id === activeMode
@@ -53,11 +46,10 @@ export default function UploadZone({ onAnalyze, loading }) {
               key={m.id}
               onClick={() => { setActiveMode(m.id); setFile(null) }}
               disabled={loading}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 flex-1 justify-center
-                ${active
-                  ? `bg-gradient-to-r ${m.color} text-white shadow-lg`
-                  : 'bg-white/5 text-white/50 hover:text-white hover:bg-white/10'
-                }`}
+              className={`flex flex-col items-center justify-center gap-2 p-3 border font-mono text-[10px] transition-all
+                ${active 
+                  ? 'bg-primary-500/20 border-primary-400 text-primary-400 shadow-[0_0_10px_rgba(0,240,255,0.2)]' 
+                  : 'bg-dark-900 border-white/5 text-white/40 hover:border-primary-500/30'}`}
             >
               <Icon className="w-4 h-4" />
               {m.label}
@@ -66,84 +58,53 @@ export default function UploadZone({ onAnalyze, loading }) {
         })}
       </div>
 
-      {/* Drop zone */}
+      {/* Target Zone */}
       <div
         {...getRootProps()}
-        className={`relative border-2 border-dashed rounded-xl p-10 text-center cursor-pointer transition-all duration-300
-          ${isDragActive ? `${mode.bg} ${mode.border} scale-[1.02]` : 'border-white/10 hover:border-white/25 hover:bg-white/3'}
-          ${loading ? 'opacity-50 cursor-not-allowed' : ''}
-          ${file ? 'bg-white/3' : ''}`}
+        className={`flex-1 relative border border-dashed flex flex-col items-center justify-center p-6 text-center transition-all cursor-pointer min-h-[200px]
+          ${isDragActive ? 'border-primary-400 bg-primary-500/5' : 'border-white/20 hover:border-primary-500/50 bg-dark-950'}
+          ${loading ? 'opacity-50 pointer-events-none' : ''}`}
       >
         <input {...getInputProps()} />
 
+        {/* Crosshair accents */}
+        <div className="absolute top-2 left-2 w-3 h-3 border-t border-l border-primary-500/50" />
+        <div className="absolute top-2 right-2 w-3 h-3 border-t border-r border-primary-500/50" />
+        <div className="absolute bottom-2 left-2 w-3 h-3 border-b border-l border-primary-500/50" />
+        <div className="absolute bottom-2 right-2 w-3 h-3 border-b border-r border-primary-500/50" />
+
         {file ? (
-          <div className="flex flex-col items-center gap-3 animate-fade-in">
-            <FileIcon mode={activeMode} />
-            <div>
-              <p className="text-white font-medium text-sm">{file.name}</p>
-              <p className="text-white/40 text-xs mt-0.5">{formatSize(file.size)}</p>
-            </div>
+          <div className="relative z-10 animate-fade-in flex flex-col items-center">
+            <Crosshair className="w-8 h-8 text-primary-400 mb-3 animate-spin-slow" />
+            <p className="font-mono text-xs text-white truncate max-w-full px-4">{file.name}</p>
+            <p className="font-mono text-[10px] text-primary-400/60 mt-1">{(file.size/1024/1024).toFixed(2)} MB</p>
             {!loading && (
-              <button
-                onClick={e => { e.stopPropagation(); setFile(null); setUploadPct(0) }}
-                className="absolute top-3 right-3 p-1.5 rounded-lg bg-white/5 hover:bg-red-500/20 text-white/40 hover:text-red-400 transition-colors"
+              <button 
+                onClick={e => { e.stopPropagation(); setFile(null) }}
+                className="mt-4 px-3 py-1 bg-danger-500/10 text-danger-400 border border-danger-500/30 text-[10px] font-mono hover:bg-danger-500/20"
               >
-                <X className="w-4 h-4" />
+                ABORT
               </button>
             )}
           </div>
         ) : (
-          <div className="flex flex-col items-center gap-3 text-white/40">
-            <div className={`w-16 h-16 rounded-2xl ${mode.bg} ${mode.border} border flex items-center justify-center`}>
-              <Upload className="w-7 h-7 text-white/60" />
-            </div>
-            <div>
-              <p className="text-white/70 font-medium">
-                {isDragActive ? 'Drop your file here' : `Drag & drop your ${mode.label.toLowerCase()}`}
-              </p>
-              <p className="text-xs mt-1">or click to browse</p>
-            </div>
-            <p className="text-xs text-white/25">
-              {Object.values(mode.accept)[0].join(', ')}
-            </p>
+          <div className="relative z-10 flex flex-col items-center opacity-60">
+            <Crosshair className="w-8 h-8 text-white mb-3" />
+            <p className="font-mono text-xs text-white uppercase tracking-wider">Awaiting Target Payload</p>
+            <p className="font-mono text-[9px] text-white/50 mt-2">DRAG & DROP OR CLICK TO LOCATE</p>
           </div>
         )}
       </div>
 
-      {/* Upload progress */}
-      {loading && uploadPct > 0 && uploadPct < 100 && (
-        <div className="mt-4">
-          <div className="flex justify-between text-xs text-white/50 mb-1">
-            <span>Uploading…</span><span>{uploadPct}%</span>
-          </div>
-          <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
-            <div
-              className={`h-full bg-gradient-to-r ${mode.color} rounded-full transition-all duration-300`}
-              style={{ width: `${uploadPct}%` }}
-            />
-          </div>
-        </div>
-      )}
-
-      {/* Analyze button */}
       <button
-        onClick={handleAnalyze}
+        onClick={() => file && !loading && onAnalyze(file, activeMode, setUploadPct)}
         disabled={!file || loading}
-        className={`mt-4 w-full py-3.5 rounded-xl font-semibold text-sm transition-all duration-200
+        className={`mt-6 w-full py-3 font-mono text-xs tracking-widest font-bold uppercase transition-all
           ${file && !loading
-            ? `bg-gradient-to-r ${mode.color} text-white hover:opacity-90 hover:shadow-lg active:scale-[0.98] shadow-lg`
-            : 'bg-white/5 text-white/30 cursor-not-allowed'
-          }`}
+            ? 'bg-primary-500/20 text-primary-400 border border-primary-500 hover:bg-primary-500/30 hover:shadow-[0_0_15px_rgba(0,240,255,0.4)]'
+            : 'bg-dark-950 border border-white/10 text-white/20 cursor-not-allowed'}`}
       >
-        {loading ? (
-          <span className="flex items-center justify-center gap-2">
-            <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
-            </svg>
-            Analyzing…
-          </span>
-        ) : `Analyze ${mode.label}`}
+        {loading ? 'EXECUTING ANALYSIS...' : 'ENGAGE DETECTOR'}
       </button>
     </div>
   )
