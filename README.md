@@ -59,7 +59,9 @@ python -m venv venv
 pip install -r requirements.txt
 
 # Create a .env file with your MongoDB URI
-echo "MONGO_URI=mongodb://localhost:27017/deepshield" > .env
+# (Note: Use your text editor to create this file to avoid Windows PowerShell encoding issues)
+# Inside backend/.env, add this line:
+# MONGO_URI=mongodb://localhost:27017/deepshield
 
 flask run
 ```

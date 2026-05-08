@@ -108,11 +108,16 @@ def mixup(x, y, alpha=0.2):
     return mixed, y_mix
 
 
+from tqdm import tqdm
+
 def run_epoch(model, loader, criterion, optimizer, device, training: bool, use_mixup: bool = False):
     model.train(training)
     total_loss, all_probs, all_labels = 0.0, [], []
+    
+    desc = "Train" if training else "Val"
+    pbar = tqdm(loader, desc=desc, leave=False, dynamic_ncols=True)
 
-    for imgs, labels in loader:
+    for imgs, labels in pbar:
         imgs   = imgs.to(device)
         labels = labels.to(device)
 
@@ -133,10 +138,12 @@ def run_epoch(model, loader, criterion, optimizer, device, training: bool, use_m
         probs = torch.sigmoid(logits).detach().cpu().numpy()
         all_probs.extend(probs.tolist())
         all_labels.extend(labels.cpu().numpy().tolist())
+        
+        # Update progress bar
+        pbar.set_postfix(loss=f"{(total_loss / max(len(all_labels), 1)):.4f}")
 
     avg_loss = total_loss / max(len(loader.dataset), 1)
     preds    = [1 if p >= 0.5 else 0 for p in all_probs]
-    # For mixed labels, round for metric computation
     int_labels = [round(l) for l in all_labels]
     acc        = accuracy_score(int_labels, preds)
     try:
@@ -156,7 +163,7 @@ def main(args):
 
     # ── Datasets ──────────────────────────────────────────────
     train_ds = ImageFakeDataset(args.data_dir, "train", augment=True)
-    val_ds   = ImageFakeDataset(args.data_dir, "val",   augment=False)
+    val_ds   = ImageFakeDataset(args.data_dir, "valid",   augment=False)
 
     if len(train_ds) == 0:
         print("\n[WARN] No training images found!")
